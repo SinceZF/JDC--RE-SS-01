@@ -1,4 +1,4 @@
-name: JDCloud RE-SS-01 Build
+name: JDCloud RE-SS-01 CI
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Initialization Environment
+    - name: Install Build Dependencies
       run: |
         sudo apt update
         sudo apt install -y build-essential clang flex bison g++ gawk \
@@ -31,7 +31,7 @@ jobs:
       run: |
         git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
 
-    - name: Load Custom Config
+    - name: Copy Custom Config
       run: |
         cp $GITHUB_WORKSPACE/.config openwrt/.config
 
@@ -41,28 +41,30 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Generate Config
+    - name: Defconfig + Check Target
       run: |
         cd openwrt
         make defconfig
-        echo "Detected target:"
+        echo "Detected target configs:"
         grep jdcloud .config || true
 
-    - name: Download Packages
+    - name: Download Source Packages
       run: |
         cd openwrt
         make download -j$(nproc)
 
-    - name: Compile Firmware
+    - name: Compile OpenWrt
       run: |
         cd openwrt
         make -j$(nproc)
 
     - name: Collect Firmware
       run: |
-        mkdir firmware
-        find openwrt/bin/targets/ -name "*factory*.bin" -exec cp {} firmware/ \;
-        find openwrt/bin/targets/ -name "*sysupgrade*.bin" -exec cp {} firmware/ \;
+        mkdir -p firmware
+        # 拷贝 factory + squashfs-factory 固件
+        find openwrt/bin/targets/ -type f \( -name "*factory.bin" -o -name "*squashfs-factory.bin" \) -exec cp {} firmware/ \;
+        # 拷贝 sysupgrade + squashfs-sysupgrade 固件
+        find openwrt/bin/targets/ -type f \( -name "*sysupgrade.bin" -o -name "*squashfs-sysupgrade.bin" \) -exec cp {} firmware/ \;
 
     - name: Set Release Tag
       run: echo "TAG=jdcloud-re-ss-01-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
@@ -73,7 +75,7 @@ jobs:
         name: JDCloud-RE-SS-01-Firmware
         path: firmware
 
-    - name: Create Release
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       if: success()
       with:
@@ -83,3 +85,44 @@ jobs:
         overwrite_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Cleanup Old Releases (Keep Latest 3)
+      if: success()
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const { owner, repo } = context.repo;
+          // Fetch all releases
+          const releases = await github.rest.repos.listReleases({
+            owner,
+            repo,
+            per_page: 100
+          });
+          const allReleases = releases.data.sort(
+            (a, b) => new Date(b.created_at) - new Date(a.created_at)
+          );
+
+          // If there are more than 3 releases, delete the extras
+          const keep = 3;
+          if (allReleases.length > keep) {
+            const toDelete = allReleases.slice(keep);
+            for (const rel of toDelete) {
+              console.log(`Deleting release: ${rel.tag_name}`);
+              await github.rest.repos.deleteRelease({
+                owner,
+                repo,
+                release_id: rel.id
+              });
+              console.log(`Deleting tag: ${rel.tag_name}`);
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `tags/${rel.tag_name}`
+                });
+              } catch (e) {
+                console.warn(`Tag deletion failed for ${rel.tag_name}, maybe already removed`);
+              }
+            }
+          }
