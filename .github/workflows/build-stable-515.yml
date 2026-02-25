@@ -38,13 +38,14 @@ jobs:
     - name: Ultra Stable Configuration (NSS + 5.15)
       run: |
         cd openwrt
-        # 彻底重置配置，防止回滚到 x86
-        rm -f .config
-        echo "CONFIG_TARGET_ipq60xx=y" > .config
+        # 彻底清空配置
+        rm -rf .config
+        # 强制写入 JDCloud RE-SS-01 的核心硬件基因
+        echo "CONFIG_TARGET_ipq60xx=y" >> .config
         echo "CONFIG_TARGET_ipq60xx_generic=y" >> .config
         echo "CONFIG_TARGET_ipq60xx_generic_DEVICE_jdcloud_re-ss-01=y" >> .config
         
-        # 强制注入核心功能
+        # 注入极致稳定插件
         cat >> .config <<EOF
         CONFIG_LINUX_5_15=y
         CONFIG_PACKAGE_kmod-qca-nss-drv=y
@@ -60,10 +61,14 @@ jobs:
         CONFIG_PACKAGE_ipv6helper=y
         EOF
         
-        # 检查是否切换成功
+        # 修正并扩展配置
         make defconfig
-        if ! grep -q "CONFIG_TARGET_DEVICE_ipq60xx_generic_DEVICE_jdcloud_re-ss-01=y" .config; then
-          echo "ERROR: TARGET MODEL FAILED TO LOCK" && exit 1
+        
+        # 二次检查确认
+        if grep -q "CONFIG_TARGET_DEVICE_ipq60xx_generic_DEVICE_jdcloud_re-ss-01=y" .config; then
+            echo "SUCCESS: Hardware locked to JDCloud AX1800 Pro"
+        else
+            echo "ERROR: TARGET MODEL FAILED TO LOCK AGAIN" && exit 1
         fi
 
     - name: Download & Compile
