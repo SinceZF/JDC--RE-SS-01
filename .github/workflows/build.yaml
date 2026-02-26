@@ -53,7 +53,14 @@ jobs:
     - name: Collect Firmware
       run: |
         mkdir -p firmware
-        find openwrt/bin/targets/ -type f \( -name "*factory.bin" -o -name "*squashfs-factory.bin" -o -name "*sysupgrade.bin" -o -name "*squashfs-sysupgrade.bin" \) -exec cp {} firmware/ \;
+        echo "===== Target Directory ====="
+        find openwrt/bin/targets/ -type d
+        echo "===== All Built Files ====="
+        find openwrt/bin/targets/ -type f
+        echo "===== Collecting Firmware ====="
+        find openwrt/bin/targets/ -type f \( -name "*factory.bin" -o -name "*sysupgrade.bin" -o -name "*.itb" \) -exec cp {} firmware/ \;
+        echo "===== Firmware Folder ====="
+        ls -lh firmware || true
 
     - name: Set Release Tag
       run: echo "TAG=jdcloud-re-ss-01-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
