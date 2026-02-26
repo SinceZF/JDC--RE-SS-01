@@ -7,7 +7,7 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: master
+  REPO_BRANCH: openwrt-23.05
   TZ: Asia/Shanghai
 
 jobs:
@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-
     - name: Checkout
       uses: actions/checkout@v4
 
