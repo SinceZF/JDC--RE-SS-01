@@ -1,0 +1,7 @@
+config smartdns
+        option enabled '1'
+        option port '6053'
+        option tcp_server '1'
+        option cache_size '1024'
+        option prefetch_domain '1'
+        option serve_expired '1'
