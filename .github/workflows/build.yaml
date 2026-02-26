@@ -1,0 +1,61 @@
+name: JDCloud RE-SS-01 Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
+
+    steps:
+    # 1. 拉取源码
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    # 2. 设置编译环境
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libncurses5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-distutils subversion bc
+
+    # 3. 配置固件
+    - name: Prepare Config
+      run: |
+        cp .github/config/jdcloud_re-ss-01.config .config
+        make defconfig
+
+    # 4. 编译固件
+    - name: Compile Firmware
+      run: |
+        make -j$(nproc) V=s
+
+    # 5. 创建 Release 文件夹
+    - name: Organize Firmware
+      run: |
+        mkdir -p firmware
+        cp bin/targets/*/*/*sysupgrade.bin firmware/
+        cp bin/targets/*/*/*factory.bin firmware/ || true
+
+    # 6. 打包并发布 Release
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.run_id }}
+        name: JDCloud RE-SS-01 Build ${{ github.run_id }}
+        files: firmware/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # 7. 清理旧固件，只保留最近 3 个 Release
+    - name: Clean Old Releases
+      run: |
+        gh release list | tail -n +4 | awk '{print $1}' | xargs -r -n1 gh release delete -y
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
