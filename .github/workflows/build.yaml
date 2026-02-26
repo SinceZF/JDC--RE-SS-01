@@ -1,61 +1,95 @@
-name: JDCloud RE-SS-01 Build
+name: JDCloud RE-SS-01 CI
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 0"
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+  TZ: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    env:
-      TZ: Asia/Shanghai
+    runs-on: ubuntu-22.04
 
     steps:
-    # 1. 拉取源码
-    - name: Checkout Repo
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
 
-    # 2. 设置编译环境
+    - name: Checkout
+      uses: actions/checkout@v4
+
     - name: Install Dependencies
       run: |
         sudo apt update
-        sudo apt install -y build-essential libncurses5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-distutils subversion bc
+        sudo apt install -y build-essential clang flex bison g++ gawk \
+        gcc-multilib g++-multilib gettext git libncurses-dev \
+        libssl-dev python3 python3-distutils rsync unzip zlib1g-dev \
+        file wget curl
 
-    # 3. 配置固件
-    - name: Prepare Config
+    - name: Clone Source
+      run: git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
+
+    - name: Copy Custom Config
+      run: cp $GITHUB_WORKSPACE/.config openwrt/.config
+
+    - name: Update & Install Feeds
       run: |
-        cp .github/config/jdcloud_re-ss-01.config .config
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Defconfig + Check Target
+      run: |
+        cd openwrt
         make defconfig
+        grep jdcloud .config || true
 
-    # 4. 编译固件
-    - name: Compile Firmware
-      run: |
-        make -j$(nproc) V=s
+    - name: Download Source Packages
+      run: cd openwrt && make download -j$(nproc)
 
-    # 5. 创建 Release 文件夹
-    - name: Organize Firmware
+    - name: Compile OpenWrt
+      run: cd openwrt && make -j$(nproc)
+
+    - name: Collect Firmware
       run: |
         mkdir -p firmware
-        cp bin/targets/*/*/*sysupgrade.bin firmware/
-        cp bin/targets/*/*/*factory.bin firmware/ || true
+        find openwrt/bin/targets/ -type f \( -name "*factory.bin" -o -name "*squashfs-factory.bin" -o -name "*sysupgrade.bin" -o -name "*squashfs-sysupgrade.bin" \) -exec cp {} firmware/ \;
 
-    # 6. 打包并发布 Release
+    - name: Set Release Tag
+      run: echo "TAG=jdcloud-re-ss-01-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: JDCloud-RE-SS-01-Firmware
+        path: firmware
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
+      if: success()
       with:
-        tag_name: ${{ github.run_id }}
-        name: JDCloud RE-SS-01 Build ${{ github.run_id }}
+        tag_name: ${{ env.TAG }}
+        name: JDCloud RE-SS-01 Build ${{ env.TAG }}
         files: firmware/*
+        overwrite_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # 7. 清理旧固件，只保留最近 3 个 Release
-    - name: Clean Old Releases
-      run: |
-        gh release list | tail -n +4 | awk '{print $1}' | xargs -r -n1 gh release delete -y
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Cleanup Old Releases (Keep Latest 3)
+      if: success()
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const { owner, repo } = context.repo;
+          const releases = await github.rest.repos.listReleases({owner, repo, per_page: 100});
+          const allReleases = releases.data.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+          const keep = 3;
+          if(allReleases.length>keep){
+            const toDelete=allReleases.slice(keep);
+            for(const rel of toDelete){
+              await github.rest.repos.deleteRelease({owner, repo, release_id: rel.id});
+              try{ await github.rest.git.deleteRef({owner, repo, ref:`tags/${rel.tag_name}`}); }catch(e){}
+            }
+          }
