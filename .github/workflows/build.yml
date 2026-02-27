@@ -1,64 +1,74 @@
-name: Build RE-SS-01
+name: Build RE-SS-01 Firmware
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:       # 手动触发
   push:
     branches:
-      - main
+      - main              # 或 master，根据你的仓库调整
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      REPO_URL: https://github.com/libwrt/openwrt.git
-      REPO_BRANCH: openwrt-23.05
       TZ: Asia/Shanghai
-      TAG_PREFIX: jdcloud-re-ss-01
+      REPO_URL: https://github.com/LiBwrt/LiBwrt.git
+      REPO_BRANCH: master
+      TARGET: ipq60xx_generic
+      DEVICE: jdcloud_re-ss-01
+      TAG: jdcloud-re-ss-01-$(date +%Y%m%d-%H%M)
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup Build Environment
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \
-          build-essential ccache libncurses-dev zlib1g-dev gawk git gettext unzip file \
-          python3 python3-distutils python3-setuptools python3-pip pkg-config
+      - name: Set up environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git wget curl gzip bzip2 python3 python3-pip bc xz-utils libncurses5-dev libncursesw5-dev zlib1g-dev file unzip cpio python3-distutils rsync jq
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
-    - name: Prepare Feeds
-      run: |
-        ./diy-part1.sh
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+      - name: Update feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
-    - name: Build Firmware
-      run: |
-        cp .config .config.backup
-        make defconfig
-        ./diy-part2.sh
-        make -j$(nproc) V=s
+      - name: Apply DIY Part 1
+        run: bash diy-part1.sh
 
-    - name: Collect Firmware
-      run: |
-        mkdir -p firmware
-        find bin/targets -name "*.bin" -o -name "*.img" -o -name "*.gz" -exec cp {} firmware/ \;
+      - name: Apply DIY Part 2
+        run: bash diy-part2.sh
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ env.TAG_PREFIX }}-${{ github.run_number }}
-        name: RE-SS-01 Build ${{ github.run_number }}
-        files: firmware/*
-        overwrite_files: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile Firmware
+        run: |
+          make defconfig
+          make -j$(nproc) V=s
+          mkdir -p firmware
+          # 收集生成的固件文件
+          cp bin/targets/$TARGET/*/* firmware/ || true
+          ls -l firmware
 
-    - name: Cleanup old releases
-      uses: devops-infra/action-cleanup-release@v2
-      with:
-        keep_latest: 3
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Firmware Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware
+          path: firmware/
+
+      - name: Install GitHub CLI
+        uses: cli/cli@v3
+
+      - name: Clean old releases (keep latest 3)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 | sort -r | awk 'NR>3 {print $1}' | xargs -r -n1 gh release delete -y
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create $TAG firmware/* \
+            --title "$TAG" \
+            --notes "自动编译 RE-SS-01 固件（NSS + 广告增强 + Bootstrap）"
