@@ -1,0 +1,5 @@
+src-git openwrt https://github.com/LiBwrt/OpenWrt.git^openwrt-23.05
+src-git luci https://github.com/LiBwrt/luci.git^openwrt-23.05
+src-git packages https://github.com/LiBwrt/packages.git^openwrt-23.05
+src-git routing https://github.com/LiBwrt/routing.git^openwrt-23.05
+src-git helloworld https://github.com/fw876/helloworld
