@@ -1,12 +1,10 @@
 #!/bin/bash
-# OpenWrt DIY Part 1 - Before update feeds
+# OpenWrt DIY script part 1 (Before Update feeds)
 
-# Add feeds
-echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
-echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
-
-# Default IP
+# 默认 IP 修改
 sed -i 's/192.168.1.1/192.168.1.1/g' package/base-files/files/bin/config_generate
 
-# Set timezone
-sed -i 's/UTC/Asia\/Shanghai/g' package/base-files/files/bin/config_generate
+# 注入自定义 .config
+cat >> .config <<EOF
+# Custom packages already included in .config
+EOF
