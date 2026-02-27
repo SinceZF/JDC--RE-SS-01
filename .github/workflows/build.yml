@@ -6,66 +6,59 @@ on:
     branches:
       - main
 
-env:
-  TZ: Asia/Shanghai
-  REPO_URL: https://github.com/LiBwrt/immortalwrt.git
-  REPO_BRANCH: master
-  TAG_PREFIX: jdcloud-re-ss-01
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      REPO_URL: https://github.com/libwrt/openwrt.git
+      REPO_BRANCH: openwrt-23.05
+      TZ: Asia/Shanghai
+      TAG_PREFIX: jdcloud-re-ss-01
+
     steps:
-      # 1️⃣ Checkout 仓库
-      - name: Checkout Source
-        uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
 
-      # 2️⃣ Setup Environment
-      - name: Setup Build Environment
-        run: sudo apt-get update && sudo apt-get install -y build-essential ccache libncurses5-dev zlib1g-dev gawk git gettext unzip file python3 python3-distutils
+    - name: Setup Build Environment
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          build-essential ccache libncurses-dev zlib1g-dev gawk git gettext unzip file \
+          python3 python3-distutils python3-setuptools python3-pip pkg-config
 
-      # 3️⃣ Update feeds
-      - name: Update Feeds
-        run: |
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+    - name: Prepare Feeds
+      run: |
+        ./diy-part1.sh
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
 
-      # 4️⃣ Apply DIY scripts
-      - name: Apply diy-part1.sh
-        run: bash diy-part1.sh
-      - name: Apply diy-part2.sh
-        run: bash diy-part2.sh
+    - name: Build Firmware
+      run: |
+        cp .config .config.backup
+        make defconfig
+        ./diy-part2.sh
+        make -j$(nproc) V=s
 
-      # 5️⃣ Compile firmware
-      - name: Build Firmware
-        run: |
-          make defconfig
-          make -j$(nproc) V=s
+    - name: Collect Firmware
+      run: |
+        mkdir -p firmware
+        find bin/targets -name "*.bin" -o -name "*.img" -o -name "*.gz" -exec cp {} firmware/ \;
 
-      # 6️⃣ Collect All Built Files
-      - name: Collect Firmware
-        run: |
-          mkdir -p firmware
-          find bin/targets -type f -name "*.bin" -o -name "*.img*" -o -name "*.tar*" -exec cp {} firmware/ \;
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.TAG_PREFIX }}-${{ github.run_number }}
+        name: RE-SS-01 Build ${{ github.run_number }}
+        files: firmware/*
+        overwrite_files: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7️⃣ Create GitHub Release
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG_PREFIX }}-${{ github.run_number }}
-          name: RE-SS-01 Build ${{ github.run_number }}
-          files: firmware/*
-          overwrite_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 8️⃣ Cleanup old releases (保留最新 3 个)
-      - name: Cleanup Old Releases
-        run: |
-          echo "Deleting old releases, keeping latest 3..."
-          gh release list --repo $GITHUB_REPOSITORY --limit 100 | \
-          tail -n +4 | awk '{print $1}' | while read tag; do
-            gh release delete "$tag" --repo $GITHUB_REPOSITORY --yes
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Cleanup old releases
+      uses: devops-infra/action-cleanup-release@v2
+      with:
+        keep_latest: 3
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
