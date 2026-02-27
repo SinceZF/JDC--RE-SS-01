@@ -1,25 +1,8 @@
 #!/bin/bash
-# OpenWrt DIY Part 2 - After feeds update
+# OpenWrt DIY script part 2 (After Update feeds)
 
-# Inject custom .config for RE-SS-01
-cat >> .config <<EOF
-# Enable hardware NSS
-CONFIG_PACKAGE_kmod-qca-nss-drv=y
-CONFIG_PACKAGE_kmod-qca-nss-ecm=y
-CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y
-CONFIG_PACKAGE_kmod-qca-nss-drv-ipv6=y
-
-# LuCI Bootstrap
-CONFIG_PACKAGE_luci-theme-bootstrap=y
-
-# Ad Blocking
-CONFIG_PACKAGE_adbyby-plus=y
-CONFIG_PACKAGE_adguardhome=y
-CONFIG_PACKAGE_luci-app-adguardhome=y
-CONFIG_PACKAGE_luci-app-smartdns=y
-CONFIG_PACKAGE_luci-app-sqm=y
-CONFIG_PACKAGE_kmod-sched-cake=y
-CONFIG_PACKAGE_luci-app-pbr=y
-CONFIG_PACKAGE_ipv6helper=y
-CONFIG_PACKAGE_luci-app-turboacc=y
+# 设置 AdGuardHome 和 adbyby-plus 开机自启
+cat >> package/emortal/default-settings/files/zzz-default-settings <<EOF
+/etc/init.d/adbyby_plus enable
+/etc/init.d/adguardhome enable
 EOF
