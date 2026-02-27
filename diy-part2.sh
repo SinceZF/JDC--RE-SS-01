@@ -1,8 +1,6 @@
 #!/bin/bash
-# OpenWrt DIY script part 2 (After Update feeds)
+# DIY Part 2 (After Update feeds)
 
-# 设置 AdGuardHome 和 adbyby-plus 开机自启
-cat >> package/emortal/default-settings/files/zzz-default-settings <<EOF
-/etc/init.d/adbyby_plus enable
-/etc/init.d/adguardhome enable
-EOF
+# 默认启用某些插件设置，可选自动配置
+# 可在这里增加自定义脚本或默认配置
+echo "DIY Part 2: post feeds update actions"
