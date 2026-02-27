@@ -56,7 +56,7 @@ jobs:
           path: firmware/
 
       - name: Setup GitHub CLI
-        uses: actions/setup-gh-cli@v3
+        uses: cli/gh-action@v3
         with:
           version: latest
 
