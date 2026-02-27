@@ -1,56 +1,58 @@
-name: RE-SS-01 Build
+name: Build RE-SS-01 LiBwrt 23.05
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
+      TARGET_DEVICE: jdcloud_re-ss-01
+      KEEP_RELEASES: 3
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout Source
+      uses: actions/checkout@v3
+      with:
+        submodules: true
+        fetch-depth: 0
 
-      - name: Set up cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            openwrt/downloads
-            openwrt/staging_dir
-            openwrt/bin
-          key: ${{ runner.os }}-openwrt-${{ hashFiles('**/.config') }}
+    - name: Setup Build Environment
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libncurses5-dev gawk git ccache gettext unzip zlib1g-dev file python3
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
 
-      - name: Update Feeds
-        run: |
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+    - name: Apply DIY Part1
+      run: bash diy-part1.sh
 
-      - name: Build Firmware
-        run: |
-          make defconfig
-          make -j$(nproc)
+    - name: Build Firmware
+      run: |
+        make defconfig
+        make -j$(nproc)
 
-      - name: Create firmware folder
-        run: mkdir -p firmware
+    - name: Apply DIY Part2
+      run: bash diy-part2.sh
 
-      - name: Copy all built files
-        run: |
-          cp openwrt/bin/targets/*/* firmware/ || true
-          ls -lh firmware
+    - name: Collect Firmware
+      run: mkdir -p firmware && cp bin/targets/ipq60xx/*/* firmware/ || true
 
-      - name: Clean old releases
-        uses: devops-infra/action-cleanup-release@v2
-        with:
-          keep_latest: 3
-          token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Cleanup Old Releases
+      uses: devops-infra/action-cleanup-release@v0.5.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        keep: ${{ env.KEEP_RELEASES }}
 
-      - name: GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.run_id }}
-          name: RE-SS-01 Build ${{ github.run_id }}
-          files: firmware/*
-          overwrite_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: re-ss-01-$(date +%Y%m%d%H%M)
+        name: "RE-SS-01 Build $(date +%Y%m%d%H%M)"
+        files: firmware/*
+        overwrite_files: true
+        token: ${{ secrets.GITHUB_TOKEN }}
