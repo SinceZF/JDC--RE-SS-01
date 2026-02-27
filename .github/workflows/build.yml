@@ -1,10 +1,10 @@
 name: Build RE-SS-01 Firmware
 
 on:
-  workflow_dispatch:       # 手动触发
+  workflow_dispatch:
   push:
     branches:
-      - main              # 或 master，根据你的仓库调整
+      - main
 
 jobs:
   build:
@@ -46,28 +46,25 @@ jobs:
           make defconfig
           make -j$(nproc) V=s
           mkdir -p firmware
-          # 收集生成的固件文件
           cp bin/targets/$TARGET/*/* firmware/ || true
           ls -l firmware
 
       - name: Upload Firmware Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware
           path: firmware/
 
-      - name: Install GitHub CLI
-        uses: cli/cli@v3
+      - name: Setup GitHub CLI
+        uses: actions/setup-gh-cli@v3
+        with:
+          version: latest
 
       - name: Clean old releases (keep latest 3)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release list --limit 100 | sort -r | awk 'NR>3 {print $1}' | xargs -r -n1 gh release delete -y
 
       - name: Create Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create $TAG firmware/* \
             --title "$TAG" \
